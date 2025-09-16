@@ -126,10 +126,6 @@ class RTLowLevelClient:
         self.ws = await self._session.ws_connect("/v1/realtime", headers=headers, params={"model": "gpt-realtime"})
 
     async def send(self, message: MessageType | str):
-        if (isinstance(message, str) and 'mcp' in message):
-            print(message)
-        elif not isinstance(message, str) and 'mcp' in message.type:
-            print(message)
 
         if not isinstance(message, str):
             message = message.model_dump_json(exclude_none=True)

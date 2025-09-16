@@ -50,7 +50,7 @@ from config import (
     TOOL_MAP
 )
 from logger import Logger
-weave.init("realtime-chat-oai-4")
+weave.init("realtime-chat-oai-5")
 
 audio_input_queue = queue.Queue()
 audio_output_queue = queue.Queue()
@@ -70,7 +70,6 @@ async def receive_messages(client: RTLowLevelClient):
         message = await client.recv()
         if message is None:
             continue
-        # print(f"{message=}")
         match message.type:
             case "session.created":
                 await logger.info(f"Server | session.created | model: {message.session.model}, session_id: {message.session.id}")

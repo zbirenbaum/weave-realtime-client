@@ -27,6 +27,13 @@ TEMPERATURE = 0.7
 MAX_RESPONSE_OUTPUT_TOKENS = 4096
 
 TOOLS = [
+    # {
+    #     "type": "mcp",
+    #     "server_label": "aws-api",
+    #     "server_url": "http://127.0.0.1:8011/mcp",
+    #     "require_approval": "never",
+    #     "allowed_tools": ['call_aws', 'suggest_aws_commands']
+    # },
     {
         "type": "mcp",
         "server_label": "github",
