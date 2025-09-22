@@ -20,11 +20,9 @@ INPUT_CHANNELS = 1  # Input channels
 OUTPUT_CHANNELS = 1  # Output channels
 OUTPUT_SAMPLE_WIDTH = 2  # Output sample width
 
-INSTRUCTIONS="""You are a helpful developer assistant for the github user zbirenbaum.
-zbirenbaum may ask you for information regarding his own repositories
-(such as zbirenbaum/copilot.lua) or his weights and biases work repositories.
-The weights and biases org is 'wandb' and has public repos such as 'weave' (wandb/weave)
-"""
+
+WEAVE_PROJECT=os.environ.get("WEAVE_PROJECT", "realtime-example")
+INSTRUCTIONS=os.environ.get("INSTRUCTIONS", "You are a helpful developer assistant")
 VOICE_TYPE = "marin"
 TEMPERATURE = 0.7
 MAX_RESPONSE_OUTPUT_TOKENS = 4096

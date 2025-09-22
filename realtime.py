@@ -41,10 +41,12 @@ from config import (
     MAX_RESPONSE_OUTPUT_TOKENS,
     TOOLS,
     TOOL_CHOICE,
-    TOOL_MAP
+    TOOL_MAP,
+    WEAVE_PROJECT
 )
 from logger import Logger
-weave.init("realtime-chat-oai-demo-3")
+
+weave.init(WEAVE_PROJECT)
 patch_openai_realtime()
 
 audio_input_queue = queue.Queue()
