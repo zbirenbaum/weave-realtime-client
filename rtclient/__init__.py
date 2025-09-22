@@ -113,7 +113,7 @@ class RTLowLevelClient:
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise ValueError("OPENAI_API_KEY must be set")
-        self._key_credential = key 
+        self._key_credential = key
         self._session = ClientSession(base_url=self._url)
         self._model = model
 
@@ -137,11 +137,6 @@ class RTLowLevelClient:
         websocket_message = await self.ws.receive()
         if websocket_message.type == WSMsgType.TEXT:
             data = json.loads(websocket_message.data)
-            if 'type' in data.keys() and 'mcp' in data['type']:
-                print(data)
-            elif not 'type' in data.keys():
-                print(data)
-
             return create_server_message_from_dict(data)
         else:
             return None

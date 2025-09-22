@@ -19,6 +19,7 @@ logger = Logger(__name__)
 load_dotenv()
 
 import weave
+from weave.integrations import patch_openai_realtime
 
 from rtclient import (
     InputAudioBufferAppendMessage,
@@ -50,7 +51,8 @@ from config import (
     TOOL_MAP
 )
 from logger import Logger
-weave.init("realtime-chat-oai-5")
+weave.init("realtime-chat-oai-demo-3")
+patch_openai_realtime()
 
 audio_input_queue = queue.Queue()
 audio_output_queue = queue.Queue()
@@ -137,17 +139,28 @@ async def receive_messages(client: RTLowLevelClient):
             case "response.function_call_arguments.done":
                 await logger.info(f"Server | response.function_call_arguments.done | response_id: {message.response_id}, item_id: {message.item_id}, arguments: {message.arguments}")
                 fn = TOOL_MAP[message.name]
-                result = fn(**json.loads(message.arguments))
+                tool_args = json.loads(message.arguments) if message.arguments else {}
+                tool_result = fn(**tool_args)
+                # If the tool provided a user item to attach to the conversation (e.g., image as data URL), send it first
+                try:
+                    if isinstance(tool_result, dict) and tool_result.get("user_item"):
+                        await client.send(json.dumps({
+                            "type": "conversation.item.create",
+                            "item": tool_result["user_item"],
+                        }))
+                except Exception as e:
+                    await logger.info(f"Client | failed to attach user item from tool result: {e}")
+
                 call_id = message.call_id
-                result = {
+                function_output_event = {
                     "type": "conversation.item.create",
                     "item": {
                         "type": "function_call_output",
                         "call_id": call_id,
-                        "output": json.dumps(result)
+                        "output": json.dumps(tool_result)
                     }
                 }
-                await client.send(json.dumps(result))
+                await client.send(json.dumps(function_output_event))
                 await client.send(json.dumps({"type": "response.create"}))
 
             case "rate_limits.updated":
@@ -226,22 +239,20 @@ async def with_openai():
                 )
             )
         )
-        print(
-            SessionUpdateMessage(
-                session=SessionUpdateParams(
-                    model=model,
-                    modalities={"text", "audio"},
-                    input_audio_format="pcm16",
-                    output_audio_format="pcm16",
-                    turn_detection=ServerVAD(type="server_vad", threshold=0.5, prefix_padding_ms=200, silence_duration_ms=200),
-                    input_audio_transcription=InputAudioTranscription(model="whisper-1"),
-                    voice=VOICE_TYPE,
-                    instructions=INSTRUCTIONS,
-                    temperature=TEMPERATURE,
-                    max_response_output_tokens=MAX_RESPONSE_OUTPUT_TOKENS,
-                    tools=TOOLS,
-                    tool_choice=TOOL_CHOICE,
-                )
+        SessionUpdateMessage(
+            session=SessionUpdateParams(
+                model=model,
+                modalities={"text", "audio"},
+                input_audio_format="pcm16",
+                output_audio_format="pcm16",
+                turn_detection=ServerVAD(type="server_vad", threshold=0.5, prefix_padding_ms=200, silence_duration_ms=200),
+                input_audio_transcription=InputAudioTranscription(model="whisper-1"),
+                voice=VOICE_TYPE,
+                instructions=INSTRUCTIONS,
+                temperature=TEMPERATURE,
+                max_response_output_tokens=MAX_RESPONSE_OUTPUT_TOKENS,
+                tools=TOOLS,
+                tool_choice=TOOL_CHOICE,
             )
         )
 

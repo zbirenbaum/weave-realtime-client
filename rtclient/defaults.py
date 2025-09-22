@@ -6,7 +6,7 @@ from rtclient.models import AudioFormat, ServerVAD, TurnDetection, Voice
 
 DEFAULT_CONVERSATION: str = "default"
 DEFAULT_TEMPERATURE: float = 0.6
-DEFAULT_VOICE: Voice = "alloy"
+DEFAULT_VOICE: Voice = "marin"
 DEFAULT_AUDIO_FORMAT: AudioFormat = "pcm16"
 DEFAULT_VAD_THRESHOLD: float = 0.5
 DEFAULT_VAD_PREFIX_PADDING_MS: int = 300

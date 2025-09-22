@@ -62,7 +62,7 @@ ConversationID = Annotated[str, AfterValidator(is_conv_id)]
 McpID = Annotated[str, AfterValidator(is_mcp_id)]
 
 
-Voice = Literal["alloy", "shimmer", "echo"]
+Voice = str
 AudioFormat = Literal["pcm16", "g711-ulaw", "g711-alaw"]
 Modality = Literal["text", "audio"]
 
@@ -154,6 +154,14 @@ class InputAudioBufferClearMessage(ClientMessageBase):
 
 MessageItemType = Literal["message"]
 
+class InputImageContentPart(BaseModel):
+    type: Literal["input_image"] = "input_image"
+    # Some server events (e.g., conversation.item.created) may omit the raw
+    # image payload and only include a placeholder. Make fields optional to be
+    # tolerant of such cases and future API changes. Accept either `image_url`
+    # or `image` to support different payload shapes.
+    image_url: str | None = None
+    image: str | None = None
 
 class InputTextContentPart(BaseModel):
     type: Literal["input_text"] = "input_text"
@@ -178,7 +186,7 @@ class OutputTextContentPart(BaseModel):
 SystemContentPart = InputTextContentPart
 UserContentPart = Union[
     Annotated[
-        Union[InputTextContentPart, InputAudioContentPart], Field(discriminator="type")
+        Union[InputTextContentPart, InputAudioContentPart, InputImageContentPart], Field(discriminator="type")
     ]
 ]
 AssistantContentPart = OutputTextContentPart
@@ -521,6 +529,9 @@ class ResponseItemTextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
 
+class ResponseItemImageContentPart(BaseModel):
+    type: Literal["image"] = "image"
+    image: str | None = None
 
 class ResponseItemAudioContentPart(BaseModel):
     type: Literal["audio"] = "audio"
@@ -534,6 +545,7 @@ ResponseItemContentPart = Annotated[
         ResponseItemInputAudioContentPart,
         ResponseItemTextContentPart,
         ResponseItemAudioContentPart,
+        ResponseItemImageContentPart,
     ],
     Field(discriminator="type"),
 ]
@@ -943,9 +955,6 @@ def create_server_message_from_dict(data: dict) -> ServerMessageType:
     try:
         return message_class(**data)
     except Exception as e:
-        print("Failed")
-        print(message_class)
-        print(data)
         raise e
 
 
@@ -960,4 +969,3 @@ def create_message_from_dict(data: dict) -> MessageType:
         cls = SERVER_MESSAGE_CLASSES[event_type]
         return cls(**data)
     raise ValueError(f"Unknown message type: {event_type}")
-
