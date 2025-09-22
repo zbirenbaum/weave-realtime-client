@@ -1,8 +1,34 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import AfterValidator, AliasChoices, BaseModel, Field
+from pydantic_core import ValidationError
+
+logger = logging.getLogger(__name__)
+
+"""
+Heavily inspired/originally based on this file from Azure:
+https://raw.githubusercontent.com/Azure-Samples/aoai-realtime-audio-sdk/refs/heads/main/python/rtclient/models.py
+
+Note that this file defines types for the OpenAI beta API and does not support the GA release
+
+Modifications for ease of development were made to:
+    1. Specify when IDs are definitely present or not instead of making them optional
+    2. Seperating what was originally the same class when it has or lacks fields depending on the source (client or server)
+
+
+Ideally we would move to the types in the openai sdk
+beta - https://github.com/openai/openai-python/tree/main/src/openai/types/beta/realtime
+GA - https://github.com/openai/openai-python/tree/main/src/openai/types/realtime
+
+Unfortunately model validation for incoming/outgoing messages for perfectly functional clients continually fails for these types
+The official sdk provides wrappers for interacting with the websockets that likely validate and modify missing fields from the user
+It's likely that the types will stabilize or we can wrap them in some way to be less strict, but for now this file is necessary
+
+This will get a second pass when support for the GA version of realtime is added and be deleted in the future.
+"""
 
 
 def is_conv_id(id: str) -> str:
@@ -32,16 +58,10 @@ def is_event_id(id: str) -> str:
         return id
     raise ValueError(f"ID {id} is not an event ID")
 
-def is_mcp_id(id: str) -> str:
-    """ID for an item such as mcp_mkaZeOUzwGFi8Xap."""
-    if id.startswith("mcp"):
-        return id
-    raise ValueError(f"ID {id} is not an mcp ID")
 
-# MCP ID is also a valid item id unfortunately
 def is_item_id(id: str) -> str:
     """ID for an item such as item_mkaZeOUzwGFi8Xap."""
-    if id.startswith("item_") or id.startswith("mcp_"):
+    if id.startswith("item_"):
         return id
     raise ValueError(f"ID {id} is not an item ID")
 
@@ -59,10 +79,20 @@ ItemID = Annotated[str, AfterValidator(is_item_id)]
 ResponseID = Annotated[str, AfterValidator(is_resp_id)]
 CallID = Annotated[str, AfterValidator(is_call_id)]
 ConversationID = Annotated[str, AfterValidator(is_conv_id)]
-McpID = Annotated[str, AfterValidator(is_mcp_id)]
 
-
-Voice = str
+# https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
+Voice = Literal[
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "sage",
+    "shimmer",
+    "verse",
+    "marin",
+    "cedar",
+]
 AudioFormat = Literal["pcm16", "g711-ulaw", "g711-alaw"]
 Modality = Literal["text", "audio"]
 
@@ -128,8 +158,7 @@ class SessionUpdateMessage(ClientMessageBase):
 
 
 class InputAudioBufferAppendMessage(ClientMessageBase):
-    """
-    Append audio data to the user audio buffer, this should be in the format specified by
+    """Append audio data to the user audio buffer, this should be in the format specified by
     input_audio_format in the session config.
     """
 
@@ -138,8 +167,7 @@ class InputAudioBufferAppendMessage(ClientMessageBase):
 
 
 class InputAudioBufferCommitMessage(ClientMessageBase):
-    """
-    Commit the pending user audio buffer, which creates a user message item with the audio content
+    """Commit the pending user audio buffer, which creates a user message item with the audio content
     and clears the buffer.
     """
 
@@ -154,14 +182,6 @@ class InputAudioBufferClearMessage(ClientMessageBase):
 
 MessageItemType = Literal["message"]
 
-class InputImageContentPart(BaseModel):
-    type: Literal["input_image"] = "input_image"
-    # Some server events (e.g., conversation.item.created) may omit the raw
-    # image payload and only include a placeholder. Make fields optional to be
-    # tolerant of such cases and future API changes. Accept either `image_url`
-    # or `image` to support different payload shapes.
-    image_url: str | None = None
-    image: str | None = None
 
 class InputTextContentPart(BaseModel):
     type: Literal["input_text"] = "input_text"
@@ -186,7 +206,7 @@ class OutputTextContentPart(BaseModel):
 SystemContentPart = InputTextContentPart
 UserContentPart = Union[
     Annotated[
-        Union[InputTextContentPart, InputAudioContentPart, InputImageContentPart], Field(discriminator="type")
+        Union[InputTextContentPart, InputAudioContentPart], Field(discriminator="type")
     ]
 ]
 AssistantContentPart = OutputTextContentPart
@@ -201,53 +221,6 @@ class BaseMessageItem(BaseModel):
     type: MessageItemType = "message"
     content: list[Any]  # Will be overridden in subclasses
     status: ItemParamStatus | None = None
-
-class ServerMessageBase(BaseModel):
-    event_id: EventID
-
-class McpListToolsInProgress(BaseModel):
-    type: Literal["mcp_list_tools.in_progress"] = "mcp_list_tools.in_progress"
-    event_id: EventID
-    item_id: ItemID
-
-class McpListToolsFailed(BaseModel):
-    type: Literal["mcp_list_tools.failed"] = "mcp_list_tools.failed"
-    item_id: ItemID
-
-class McpListToolsCompleted(BaseModel):
-    type: Literal["mcp_list_tools.completed"] = "mcp_list_tools.completed"
-    event_id: EventID
-    item_id: ItemID
-
-class ResponseMcpCallArgumentsDeltaMessage(ServerMessageBase):
-    type: Literal["response.mcp_call_arguments.delta"] = (
-        "response.mcp_call_arguments.delta"
-    )
-    event_id: EventID
-    response_id: ResponseID
-    item_id: McpID
-    delta: str
-
-class ResponseMcpCallArgumentsDoneMessage(ServerMessageBase):
-    type: Literal["response.mcp_call_arguments.done"] = (
-        "response.mcp_call_arguments.done"
-    )
-    event_id: EventID
-    response_id: ResponseID
-    item_id: McpID
-    output_index: int
-    arguments: str
-
-class ResponseMcpCallInProgress(ServerMessageBase):
-    type: Literal["response.mcp_call.in_progress"] = "response.mcp_call.in_progress"
-    output_index: int
-    item_id: McpID
-
-class ResponseMcpCallCompleted(ServerMessageBase):
-    type: Literal["response.mcp_call.completed"] = "response.mcp_call.completed"
-    output_index: int
-    item_id: McpID
-
 
 
 class BaseFunctionCallItem(BaseModel):
@@ -359,27 +332,8 @@ ClientItem = Annotated[
     Field(discriminator="type"),
 ]
 
-class McpListItem(BaseModel):
-    id: ItemID
-    type: Literal["mcp_list_tools"] = "mcp_list_tools"
-    object: Literal["realtime.item"] = "realtime.item"
-    server_label: str
-    tools: list[Any]
-
-
-class McpCallItem(BaseModel):
-    id: McpID
-    object: Literal["realtime.item"] = "realtime.item"
-    type: Literal["mcp_call"] = "mcp_call"
-    approval_request_id: str | None = None
-    server_label: str
-    name: str
-    arguments: str | None = None
-    output: str | None = None
-    error: RealtimeError | None
-
 ServerItem = Annotated[
-    Union[ServerMessageItem, ServerFunctionCallItem, ServerFunctionCallOutputItem, McpListItem, McpCallItem],
+    Union[ServerMessageItem, ServerFunctionCallItem, ServerFunctionCallOutputItem],
     Field(discriminator="type"),
 ]
 
@@ -436,10 +390,23 @@ class RealtimeError(BaseModel):
     event_id: EventID | None = None
 
 
+class ServerMessageBase(BaseModel):
+    event_id: EventID
+
 
 class ErrorMessage(ServerMessageBase):
     type: Literal["error"] = "error"
     error: RealtimeError
+
+
+class UnknownMessage(BaseModel):
+    type: str = "unknown"
+
+
+class UnknownClientMessage(ClientMessageBase, UnknownMessage): ...
+
+
+class UnknownServerMessage(ServerMessageBase, UnknownMessage): ...
 
 
 class Session(BaseModel):
@@ -483,8 +450,7 @@ class InputAudioBufferClearedMessage(ServerMessageBase):
 
 
 class InputAudioBufferSpeechStartedMessage(ServerMessageBase):
-    """
-    If the server VAD is enabled, this event is sent when speech is detected in the user audio buffer.
+    """If the server VAD is enabled, this event is sent when speech is detected in the user audio buffer.
     It tells you where in the audio stream (in milliseconds) the speech started, plus an item_id
     which will be used in the corresponding speech_stopped event and the item created in the conversation
     when speech stops.
@@ -498,8 +464,7 @@ class InputAudioBufferSpeechStartedMessage(ServerMessageBase):
 
 
 class InputAudioBufferSpeechStoppedMessage(ServerMessageBase):
-    """
-    If the server VAD is enabled, this event is sent when speech stops in the user audio buffer.
+    """If the server VAD is enabled, this event is sent when speech stops in the user audio buffer.
     It tells you where in the audio stream (in milliseconds) the speech stopped, plus an item_id
     which will be used in the corresponding speech_started event and the item created in the conversation
     when speech starts.
@@ -529,9 +494,6 @@ class ResponseItemTextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
 
-class ResponseItemImageContentPart(BaseModel):
-    type: Literal["image"] = "image"
-    image: str | None = None
 
 class ResponseItemAudioContentPart(BaseModel):
     type: Literal["audio"] = "audio"
@@ -545,7 +507,6 @@ ResponseItemContentPart = Annotated[
         ResponseItemInputAudioContentPart,
         ResponseItemTextContentPart,
         ResponseItemAudioContentPart,
-        ResponseItemImageContentPart,
     ],
     Field(discriminator="type"),
 ]
@@ -576,9 +537,10 @@ class ResponseFunctionCallOutputItem(ResponseItemBase):
     call_id: CallID
     output: str
 
+
 ResponseItem = Annotated[
     Union[
-        ResponseMessageItem, ResponseFunctionCallItem, ResponseFunctionCallOutputItem, McpCallItem
+        ResponseMessageItem, ResponseFunctionCallItem, ResponseFunctionCallOutputItem
     ],
     Field(discriminator="type"),
 ]
@@ -783,6 +745,7 @@ class ResponseAudioDoneMessage(ServerMessageBase):
     output_index: int
     content_index: int
 
+
 class ResponseFunctionCallArgumentsDeltaMessage(ServerMessageBase):
     type: Literal["response.function_call_arguments.delta"] = (
         "response.function_call_arguments.delta"
@@ -829,6 +792,7 @@ UserMessageType = Annotated[
         ItemDeleteMessage,
         ResponseCreateMessage,
         ResponseCancelMessage,
+        UnknownClientMessage,
     ],
     Field(discriminator="type"),
 ]
@@ -862,14 +826,8 @@ ServerMessageType = Annotated[
         ResponseAudioDoneMessage,
         ResponseFunctionCallArgumentsDeltaMessage,
         ResponseFunctionCallArgumentsDoneMessage,
-        ResponseMcpCallArgumentsDoneMessage,
-        ResponseMcpCallArgumentsDeltaMessage,
         RateLimitsUpdatedMessage,
-        McpListToolsInProgress,
-        McpListToolsCompleted,
-        McpListToolsFailed,
-        ResponseMcpCallCompleted,
-        ResponseMcpCallInProgress,
+        UnknownServerMessage,
     ],
     Field(discriminator="type"),
 ]
@@ -917,55 +875,61 @@ SERVER_MESSAGE_CLASSES: dict[str, type[ServerMessageType]] = {
     "response.audio.done": ResponseAudioDoneMessage,
     "response.function_call_arguments.delta": ResponseFunctionCallArgumentsDeltaMessage,
     "response.function_call_arguments.done": ResponseFunctionCallArgumentsDoneMessage,
-    "response.mcp_call_arguments.delta": ResponseMcpCallArgumentsDeltaMessage,
-    "response.mcp_call_arguments.done": ResponseMcpCallArgumentsDoneMessage,
-    "response.mcp_call.completed": ResponseMcpCallCompleted,
-    "response.mcp_call.in_progress": ResponseMcpCallInProgress,
-    "mcp_list_tools.in_progress": McpListToolsInProgress,
-    "mcp_list_tools.completed": McpListToolsCompleted,
-    "mcp_list_tools.failed": McpListToolsFailed,
     "rate_limits.updated": RateLimitsUpdatedMessage,
 }
+
 MessageType = Union[UserMessageType, ServerMessageType]
 
 
-def create_user_message_from_dict(data: dict) -> UserMessageType:
+def create_user_message_from_dict(data: dict) -> UserMessageType | None:
     """Create a user message object from a dictionary based on its 'type'."""
-    event_type: str | None = data.get("type")
-    if not isinstance(event_type, str):
-        raise ValueError(f"Invalid data: {data}")
-
+    event_type = data.get("type")
+    if not event_type:
+        return None
     # Use .get() to look up the class, providing a default if the key is not found.
-    message_class = USER_MESSAGE_CLASSES.get(event_type)
-    if not message_class:
-        raise ValueError(f"Unknown message type: {event_type}")
-    return message_class(**data)
+    cls = USER_MESSAGE_CLASSES.get(event_type, None)
 
+    if not cls:
+        return None
 
-def create_server_message_from_dict(data: dict) -> ServerMessageType:
-    """Create a server message object from a dictionary based on its 'type'."""
-    event_type: str | None = data.get("type")
-    if not isinstance(event_type, str):
-        raise ValueError(f"Invalid data: {data}")
-
-    # Use .get() to look up the class, providing a default if the key is not found.
-    message_class = SERVER_MESSAGE_CLASSES.get(event_type)
-    if not message_class:
-        raise ValueError(f"Unknown message type: {event_type}")
     try:
-        return message_class(**data)
-    except Exception as e:
-        raise e
+        return cls(**data)
+    except ValidationError as e:
+        logger.debug(
+            f"Failed to construct message for type {event_type} with error - {e}"
+        )
+
+    return None
 
 
-def create_message_from_dict(data: dict) -> MessageType:
+def create_server_message_from_dict(data: dict) -> ServerMessageType | None:
+    event_type = data.get("type")
+    if not event_type:
+        return None
+    # Use .get() to look up the class, providing a default if the key is not found.
+    cls = SERVER_MESSAGE_CLASSES.get(event_type, None)
+
+    if not cls:
+        return None
+
+    try:
+        return cls(**data)
+    except ValidationError as e:
+        logger.debug(
+            f"Failed to construct message for type {event_type} with error - {e}"
+        )
+
+    return None
+
+
+def create_message_from_dict(data: dict) -> MessageType | None:
     """Create a message object from a dictionary based on its 'type'."""
     event_type = data.get("type") or ""
     if event_type in USER_MESSAGE_CLASSES.keys():
-        cls = USER_MESSAGE_CLASSES[event_type]
-        return cls(**data)
+        return create_user_message_from_dict(data)
 
     elif event_type in SERVER_MESSAGE_CLASSES.keys():
-        cls = SERVER_MESSAGE_CLASSES[event_type]
-        return cls(**data)
-    raise ValueError(f"Unknown message type: {event_type}")
+        return create_server_message_from_dict(data)
+
+    logger.warning(f"Unknown message type - {event_type}")
+    return None

@@ -2,13 +2,14 @@ import base64
 import datetime
 import mimetypes
 import os
-from typing import List, Optional
+from typing import List, Optional, TypedDict
+from typing import Any
 from zoneinfo import ZoneInfo
 import dotenv
 import pyaudio
 dotenv.load_dotenv()
 
-GH_PAT = os.environ.get("GH_PAT") or ""
+GH_PAT = os.environ.get("GH_PAT") or None
 
 INPUT_SAMPLE_RATE = 24000  # Input sample rate
 INPUT_CHUNK_SIZE = 2048  # Input chunk size
@@ -29,13 +30,6 @@ TEMPERATURE = 0.7
 MAX_RESPONSE_OUTPUT_TOKENS = 4096
 
 TOOLS = [
-    # {
-    #     "type": "mcp",
-    #     "server_label": "aws-api",
-    #     "server_url": "http://127.0.0.1:8011/mcp",
-    #     "require_approval": "never",
-    #     "allowed_tools": ['call_aws', 'suggest_aws_commands']
-    # },
     {
         "type": "mcp",
         "server_label": "github",

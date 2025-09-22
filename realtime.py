@@ -7,8 +7,6 @@ import base64
 import json
 import os
 import queue
-import sys
-import time
 import threading
 import pyaudio
 from dotenv import load_dotenv
@@ -28,11 +26,6 @@ from rtclient import (
     ServerVAD,
     SessionUpdateMessage,
     SessionUpdateParams,
-    ResponseCreateMessage,
-    ResponseCreateParams,
-    ItemCreateMessage,
-    ResponseFunctionCallOutputItem,
-    models,
 )
 from config import (
     INPUT_SAMPLE_RATE,
