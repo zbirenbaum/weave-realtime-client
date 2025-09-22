@@ -3,7 +3,7 @@ name = "realtime-api-local-inout-python"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.12.15",
     "azure-core>=1.35.0",
@@ -126,4 +126,5 @@ dependencies = [
     "websocket-client>=1.8.0",
     "websockets>=15.0.1",
     "yarl>=1.18.3",
+    "weave"
 ]
