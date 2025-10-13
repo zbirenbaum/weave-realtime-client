@@ -10,3 +10,8 @@
 ## Running:
  - `uv run realtime.py`
  - Start speaking once the processing message appears
+
+# Credits:
+Heavily inspired/forked from:
+ - https://github.com/M6saw0/realtime-api-local-inout-python
+ - https://github.com/Azure-Samples/aoai-realtime-audio-sdk
