@@ -126,4 +126,5 @@ dependencies = [
     "websocket-client>=1.8.0",
     "websockets>=15.0.1",
     "yarl>=1.18.3",
+    "weave>=0.52.9",
 ]
