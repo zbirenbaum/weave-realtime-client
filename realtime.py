@@ -8,6 +8,7 @@ import json
 import os
 import queue
 import threading
+import time
 import pyaudio
 from dotenv import load_dotenv
 from logger import Logger
@@ -44,6 +45,7 @@ from config import (
     TOOL_MAP,
     WEAVE_PROJECT
 )
+from idle_handler import reset_idle_timer
 from logger import Logger
 
 weave.init(WEAVE_PROJECT)
@@ -85,7 +87,7 @@ async def receive_messages(client: RTLowLevelClient):
                 await asyncio.sleep(0)
             case "input_audio_buffer.speech_stopped":
                 await logger.info(f"Server | input_audio_buffer.speech_stopped | item_id: {message.item_id}, audio_end_ms: {message.audio_end_ms}")
-                pass
+                reset_idle_timer(logger)
             case "conversation.item.created":
                 await logger.info(f"Server | conversation.item.created | item_id: {message.item.id}, previous_item_id: {message.previous_item_id}")
             case "conversation.item.truncated":
@@ -102,7 +104,7 @@ async def receive_messages(client: RTLowLevelClient):
                 await logger.info(f"Server | response.created | response_id: {message.response.id}")
             case "response.done":
                 await logger.info(f"Server | response.done | response_id: {message.response.id}")
-                pass
+                reset_idle_timer(logger)
             case "response.output_item.added":
                 await logger.info(f"Server | response.output_item.added | response_id: {message.response_id}, item_id: {message.item.id}")
             case "response.output_item.done":
@@ -129,6 +131,7 @@ async def receive_messages(client: RTLowLevelClient):
                 await asyncio.sleep(0)
             case "response.audio.done":
                 await logger.info(f"Server | response.audio.done | response_id: {message.response_id}, item_id: {message.item_id}")
+                reset_idle_timer(logger)
             case "response.function_call_arguments.delta":
                 await logger.info(f"Server | response.function_call_arguments.delta | response_id: {message.response_id}, item_id: {message.item_id}, arguments: {message.delta}")
             case "response.function_call_arguments.done":
@@ -178,10 +181,16 @@ async def send_audio(client: RTLowLevelClient):
         await client.send(InputAudioBufferAppendMessage(audio=base64_audio))
         await asyncio.sleep(0)
 
-def play_audio(output_stream: pyaudio.Stream):
+def play_audio(output_stream: pyaudio.Stream, main_event_loop: asyncio.AbstractEventLoop):
+    IDLE_RESET_THROTTLE_SECONDS = 1.0
+    last_idle_reset_at = 0.0
     while True:
         audio_data = audio_output_queue.get()
         output_stream.write(audio_data)
+        now = time.monotonic()
+        if now - last_idle_reset_at >= IDLE_RESET_THROTTLE_SECONDS:
+            main_event_loop.call_soon_threadsafe(reset_idle_timer, logger)
+            last_idle_reset_at = now
 
 async def with_openai():
     key = os.environ.get("OPENAI_API_KEY") or ""
@@ -251,8 +260,9 @@ async def with_openai():
             )
         )
 
+        main_event_loop = asyncio.get_running_loop()
         threading.Thread(target=listen_audio, args=(input_stream,), daemon=True).start()
-        threading.Thread(target=play_audio, args=(output_stream,), daemon=True).start()
+        threading.Thread(target=play_audio, args=(output_stream, main_event_loop), daemon=True).start()
         send_audio_task = asyncio.create_task(send_audio(client))
         receive_task = asyncio.create_task(receive_messages(client))
 
