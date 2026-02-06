@@ -23,6 +23,9 @@ class Logger:
     async def info(self, message):
         self.logger.info(message)
 
+    async def warning(self, message):
+        self.logger.warning(message)
+
     async def error(self, message):
         self.logger.error(message)
 
