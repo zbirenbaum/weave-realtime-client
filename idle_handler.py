@@ -1,9 +1,9 @@
 import asyncio
 
+from config import IDLE_TIMEOUT_SECONDS
 from conversation_logger import log_conversation
 
 idle_timer_task: asyncio.Task | None = None
-IDLE_TIMEOUT_SECONDS = 5
 
 
 async def _idle_timer_callback(logger, thread_id: str | None):

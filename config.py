@@ -23,6 +23,7 @@ OUTPUT_SAMPLE_WIDTH = 2  # Output sample width
 
 WEAVE_PROJECT=os.environ.get("WEAVE_PROJECT", "realtime-example")
 INSTRUCTIONS=os.environ.get("INSTRUCTIONS", "You are a helpful developer assistant")
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("IDLE_TIMEOUT_SECONDS", "5"))
 VOICE_TYPE = "marin"
 TEMPERATURE = 0.7
 MAX_RESPONSE_OUTPUT_TOKENS = 4096
