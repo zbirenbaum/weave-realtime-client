@@ -29,7 +29,7 @@ async def clear_idle_timer(logger):
 
 
 async def reset_idle_timer(logger, thread_id: str | None = None):
-    """Cancel any existing idle timer and start a new one. Use only after user or assistant finishes speaking."""
+    """Cancel any existing idle timer and start a new one. Use when user or assistant finishes speaking."""
 
     global idle_timer_task
     await clear_idle_timer(None)
