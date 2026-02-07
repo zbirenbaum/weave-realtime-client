@@ -46,7 +46,7 @@ def remove_content_key_from_messages(messages: list[dict], content_key: str) -> 
 async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict], total_message_size: int):
     """Perform the logging of messages to the given logger."""
     await logger.info(
-        f"Event | call | thread_id={thread_id} call_id={call_id} total_message_size={total_message_size} messages={messages}"
+        f"Idle | Messages | thread_id={thread_id} call_id={call_id} total_message_size={total_message_size} messages={messages}"
     )
 
 
@@ -76,7 +76,7 @@ def extract_messages(client, call) -> list[dict]:
 @weave.op()
 async def log_conversation(logger, thread_id: str | None) -> None:
     """Fetch calls for the given thread and log the most recent realtime conversation."""
-    await logger.info(f"Event | fetching thread calls for thread_id={thread_id}")
+    await logger.info(f"Idle | Logging conversation for thread_id={thread_id}")
     if thread_id is None:
         return
     try:

@@ -10,7 +10,7 @@ async def _idle_timer_callback(logger, thread_id: str | None):
     global idle_timer_task
     try:
         await asyncio.sleep(IDLE_TIMEOUT_SECONDS)
-        await logger.info(f"Event | no interaction for {IDLE_TIMEOUT_SECONDS} seconds")
+        await logger.info(f"Idle | No interaction for {IDLE_TIMEOUT_SECONDS} seconds")
         await log_conversation(logger, thread_id)
         idle_timer_task = None
     except asyncio.CancelledError:
@@ -23,7 +23,7 @@ async def clear_idle_timer(logger):
     global idle_timer_task
     if idle_timer_task is not None:
         if logger is not None:
-            await logger.info("Clearing idle timer")
+            await logger.info("Idle | Clearing idle timer")
         idle_timer_task.cancel()
         idle_timer_task = None
 
@@ -33,5 +33,5 @@ async def reset_idle_timer(logger, thread_id: str | None = None):
 
     global idle_timer_task
     await clear_idle_timer(None)
-    await logger.info("Resetting idle timer")
+    await logger.info("Idle | Restarting idle timer")
     idle_timer_task = asyncio.create_task(_idle_timer_callback(logger, thread_id))

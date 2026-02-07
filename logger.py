@@ -33,6 +33,7 @@ class Logger:
 async def main(logger: Logger):
     await logger.info("Hello, World!")
     await logger.error("Hello, World!")
+    await logger.warning("Hello, World!")
     await logger.debug("Hello, World!")
 
 if __name__ == "__main__":
