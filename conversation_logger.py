@@ -1,5 +1,7 @@
 """Log conversation state from Weave-instrumented realtime calls."""
 
+import copy
+import json
 import weave
 from weave.trace_server.trace_server_interface import CallsFilter
 from weave.trace.serialization.serialize import to_json
@@ -32,40 +34,32 @@ def get_call_with_full_conversation(client, thread_id: str):
 
 
 @weave.op()
-def get_transcripts(messages: list[dict]):
-    transcripts = []
+def remove_content_key_from_messages(messages: list[dict], content_key: str) -> None:
+    """Remove a key from each message's content parts (e.g. 'audio' or 'transcript')."""
     for message in messages:
-        if message["type"] == "message" and "content" in message:
-            role = message.get("role", "unknown")
+        if message.get("type") == "message" and "content" in message:
             for content in message["content"]:
-                if "transcript" in content:
-                    transcripts.append({"role": role, "transcript": content["transcript"]})
-    return transcripts
+                if content_key in content:
+                    del content[content_key]
 
 
-@weave.op()
-def remove_transcript_from_messages(messages: list[dict]):
-    """Useful for confirming that the audio-based monitors are actually operating on audio"""
-    for message in messages:
-        if message["type"] == "message" and "content" in message:
-            for content in message["content"]:
-                if "transcript" in content:
-                    del content["transcript"]
-
-
-@weave.op()
-async def log_transcripts(logger, thread_id: str, call_id: str, transcripts: list[dict]):
-    """Log the transcripts of the given messages."""
-    for item in transcripts:
-        await logger.info(f"Event | transcript | thread_id={thread_id} call_id={call_id} {item['role']}: {item['transcript']}")
-
-
-@weave.op()
-async def log_realtime_messages(logger, thread_id: str, call_id: str, messages: list[dict]):
-    """Perform the logging of realtime messages to the given logger."""
-    await logger.debug(
-        f"Event | call | thread_id={thread_id} call_id={call_id} messages={messages}"
+async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict], total_message_size: int):
+    """Perform the logging of messages to the given logger."""
+    await logger.info(
+        f"Event | call | thread_id={thread_id} call_id={call_id} total_message_size={total_message_size} messages={messages}"
     )
+
+
+@weave.op()
+async def log_transcript_messages(logger, thread_id: str, call_id: str, messages: list[dict], messages_size: int):
+    """Log messages (e.g. transcript form with audio removed) in original message structure."""
+    await log_messages(logger, thread_id, call_id, messages, messages_size)
+
+
+@weave.op()
+async def log_audio_messages(logger, thread_id: str, call_id: str, messages: list[dict], messages_size: int):
+    """Perform the logging of realtime (audio) messages to the given logger."""
+    await log_messages(logger, thread_id, call_id, messages, messages_size)
 
 
 @weave.op()
@@ -92,13 +86,15 @@ async def log_conversation(logger, thread_id: str | None) -> None:
             return
 
         messages_for_log = extract_messages(client, last_call)
-        
-        transcripts = get_transcripts(messages_for_log)
-        await log_transcripts(logger, thread_id, last_call.id, transcripts)
+
+        last_call_id = f"{last_call.id}"
+        messages_for_transcript = copy.deepcopy(messages_for_log)
+        remove_content_key_from_messages(messages_for_transcript, "audio")
+        await log_transcript_messages(logger, thread_id, last_call_id, messages_for_transcript, len(json.dumps(messages_for_transcript).encode()))
 
         # remove transcripts before logging to demonstrate that the audio-based monitors are actually operating on audio
-        remove_transcript_from_messages(messages_for_log)
-        await log_realtime_messages(logger, thread_id, last_call.id, messages_for_log)
+        remove_content_key_from_messages(messages_for_log, "transcript")
+        await log_audio_messages(logger, thread_id, last_call_id, messages_for_log, len(json.dumps(messages_for_log).encode()))
 
     except Exception as e:
-        await logger.info(f"Event | failed to get thread calls: {e}")
+        await logger.error(f"Event | failed to get thread calls: {e}")
