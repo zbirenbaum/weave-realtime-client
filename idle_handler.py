@@ -10,8 +10,9 @@ async def _idle_timer_callback(logger, thread_id: str | None):
     global idle_timer_task
     try:
         await asyncio.sleep(IDLE_TIMEOUT_SECONDS)
-        await logger.info(f"Idle | No interaction for {IDLE_TIMEOUT_SECONDS} seconds")
-        await log_conversation(logger, thread_id)
+        logged_valid_conversation = await log_conversation(logger, thread_id)
+        if logged_valid_conversation:
+            await logger.info(f"Idle | Idle conversation logged for thread_id={thread_id}")
         idle_timer_task = None
     except asyncio.CancelledError:
         pass

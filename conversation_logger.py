@@ -2,6 +2,8 @@
 
 import copy
 import json
+from datetime import datetime, timezone
+
 import weave
 from weave.trace_server.trace_server_interface import CallsFilter
 from weave.trace.serialization.serialize import to_json
@@ -73,8 +75,21 @@ def extract_messages(client, call) -> list[dict]:
     return messages_for_log
 
 
+def validate_call(call) -> bool:
+    if "messages" not in call.inputs or "output" not in call.output:
+        return False
+    ended_at = getattr(call, "ended_at", None)
+    if ended_at is None:
+        return False
+    now = datetime.now(timezone.utc)
+    if ended_at.tzinfo is None:
+        ended_at = ended_at.replace(tzinfo=timezone.utc)
+    if (now - ended_at).total_seconds() < 5:
+        return False
+    return True
+
 @weave.op()
-async def log_conversation(logger, thread_id: str | None) -> None:
+async def log_conversation(logger, thread_id: str | None) -> False:
     """Fetch calls for the given thread and log the most recent realtime conversation."""
     await logger.info(f"Idle | Logging conversation for thread_id={thread_id}")
     if thread_id is None:
@@ -84,6 +99,9 @@ async def log_conversation(logger, thread_id: str | None) -> None:
         last_call = get_call_with_full_conversation(client, thread_id)
         if last_call is None:
             return
+
+        if not validate_call(last_call):
+            return False
 
         messages_for_log = extract_messages(client, last_call)
 
@@ -96,5 +114,9 @@ async def log_conversation(logger, thread_id: str | None) -> None:
         remove_content_key_from_messages(messages_for_log, "transcript")
         await log_audio_messages(logger, thread_id, last_call_id, messages_for_log, len(json.dumps(messages_for_log).encode()))
 
+        return True
+
     except Exception as e:
         await logger.error(f"Event | failed to get thread calls: {repr(e)}")
+
+    return False
