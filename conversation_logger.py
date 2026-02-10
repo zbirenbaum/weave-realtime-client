@@ -48,7 +48,7 @@ def remove_content_key_from_messages(messages: list[dict], content_key: str) -> 
                     del content[content_key]
 
 
-async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict], total_message_size: int):
+async def log_messages_to_console(logger, thread_id: str, call_id: str, messages: list[dict], total_message_size: int):
     """Perform the logging of messages to the given logger."""
     await logger.info(
         f"Idle | Messages | thread_id={thread_id} call_id={call_id} total_message_size={total_message_size} messages={messages}"
@@ -58,13 +58,25 @@ async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict
 @weave.op()
 async def log_transcript_messages(logger, thread_id: str, call_id: str, messages: list[dict], messages_size: int):
     """Log messages (e.g. transcript form with audio removed) in original message structure."""
-    await log_messages(logger, thread_id, call_id, messages, messages_size)
+    await log_messages_to_console(logger, thread_id, call_id, messages, messages_size)
 
 
 @weave.op()
 async def log_audio_messages(logger, thread_id: str, call_id: str, messages: list[dict], messages_size: int):
     """Perform the logging of realtime (audio) messages to the given logger."""
-    await log_messages(logger, thread_id, call_id, messages, messages_size)
+    await log_messages_to_console(logger, thread_id, call_id, messages, messages_size)
+
+
+@weave.op()
+async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict]):
+    messages_with_transcript_only = copy.deepcopy(messages)
+    remove_content_key_from_messages(messages_with_transcript_only, "audio")
+    await log_transcript_messages(logger, thread_id, call_id, messages_with_transcript_only, len(json.dumps(messages_with_transcript_only).encode()))
+
+    # remove transcripts before logging to demonstrate that the audio-based monitors are actually operating on audio
+    messages_with_audio_only = copy.deepcopy(messages)
+    remove_content_key_from_messages(messages_with_audio_only, "transcript")
+    await log_audio_messages(logger, thread_id, call_id, messages_with_audio_only, len(json.dumps(messages_with_audio_only).encode()))
 
 
 @weave.op()
@@ -103,16 +115,8 @@ async def log_conversation(logger, thread_id: str | None) -> False:
         if not validate_call(last_call):
             return False
 
-        messages_for_log = extract_messages(client, last_call)
-
-        last_call_id = f"{last_call.id}"
-        messages_for_transcript = copy.deepcopy(messages_for_log)
-        remove_content_key_from_messages(messages_for_transcript, "audio")
-        await log_transcript_messages(logger, thread_id, last_call_id, messages_for_transcript, len(json.dumps(messages_for_transcript).encode()))
-
-        # remove transcripts before logging to demonstrate that the audio-based monitors are actually operating on audio
-        remove_content_key_from_messages(messages_for_log, "transcript")
-        await log_audio_messages(logger, thread_id, last_call_id, messages_for_log, len(json.dumps(messages_for_log).encode()))
+        messages = extract_messages(client, last_call)
+        await log_messages(logger, thread_id, f"{last_call.id}", messages)
 
         return True
 
