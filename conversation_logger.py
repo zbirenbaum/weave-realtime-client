@@ -97,4 +97,4 @@ async def log_conversation(logger, thread_id: str | None) -> None:
         await log_audio_messages(logger, thread_id, last_call_id, messages_for_log, len(json.dumps(messages_for_log).encode()))
 
     except Exception as e:
-        await logger.error(f"Event | failed to get thread calls: {e}")
+        await logger.error(f"Event | failed to get thread calls: {repr(e)}")
