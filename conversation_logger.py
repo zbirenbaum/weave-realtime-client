@@ -8,7 +8,7 @@ import weave
 from weave.trace_server.trace_server_interface import CallsFilter
 from weave.trace.serialization.serialize import to_json
 
-from object_helpers import resolve_refs_recursive, unbox_recursive
+from weave.trace import box
 
 
 @weave.op()
@@ -24,7 +24,10 @@ def get_call_with_full_conversation(client, thread_id: str):
     return the most recent call that contains the full conversation.
     """
     trace_ids = get_traces_for_thread(client, thread_id)
-    calls = client.get_calls(filter=CallsFilter(trace_ids=trace_ids))
+    calls = client.get_calls(
+        filter=CallsFilter(trace_ids=trace_ids),
+        expand_columns=["inputs", "output"],
+    )
 
     realtime_calls_without_thread_id = [c for c in calls if c.thread_id is None]
     realtime_child_calls = [c for c in realtime_calls_without_thread_id if len(c.children()) == 0]
@@ -67,11 +70,8 @@ async def log_audio_messages(logger, thread_id: str, call_id: str, messages: lis
 @weave.op()
 def extract_messages(client, call) -> list[dict]:
     """Convert a realtime call to a list of message dicts suitable for logging."""
-    project_id = call.project_id
     messages = call.inputs["messages"] + call.output["output"]
-    resolved_messages = resolve_refs_recursive(messages, client, project_id)
-    unboxed_messages = unbox_recursive(resolved_messages)
-    messages_for_log = to_json(unboxed_messages, project_id, client)
+    messages_for_log = to_json(messages, call.project_id, client)
     return messages_for_log
 
 
