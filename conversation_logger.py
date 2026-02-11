@@ -60,11 +60,17 @@ async def log_transcript_messages(logger, thread_id: str, call_id: str, messages
     """Log messages (e.g. transcript form with audio removed) in original message structure."""
     await log_messages_to_console(logger, thread_id, call_id, messages, messages_size)
 
+    # Make the call look like a realtime API so that we can see a chat tab in the Weave UI
+    return { "output": [] }
+
 
 @weave.op()
 async def log_audio_messages(logger, thread_id: str, call_id: str, messages: list[dict], messages_size: int):
     """Perform the logging of realtime (audio) messages to the given logger."""
     await log_messages_to_console(logger, thread_id, call_id, messages, messages_size)
+
+    # Make the call look like a realtime API so that we can see a chat tab in the Weave UI
+    return { "output": [] }
 
 
 @weave.op()
@@ -73,10 +79,13 @@ async def log_messages(logger, thread_id: str, call_id: str, messages: list[dict
     remove_content_key_from_messages(messages_with_transcript_only, "audio")
     await log_transcript_messages(logger, thread_id, call_id, messages_with_transcript_only, len(json.dumps(messages_with_transcript_only).encode()))
 
-    # remove transcripts before logging to demonstrate that the audio-based monitors are actually operating on audio
+    # Remove transcripts before logging to demonstrate that the audio-based monitors are actually operating on audio
     messages_with_audio_only = copy.deepcopy(messages)
     remove_content_key_from_messages(messages_with_audio_only, "transcript")
     await log_audio_messages(logger, thread_id, call_id, messages_with_audio_only, len(json.dumps(messages_with_audio_only).encode()))
+    
+    # Make the call look like a realtime API so that we can see a chat tab in the Weave UI
+    return { "output": [] }
 
 
 @weave.op()
