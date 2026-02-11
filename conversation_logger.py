@@ -26,7 +26,6 @@ def get_call_with_full_conversation(client, thread_id: str):
     trace_ids = get_traces_for_thread(client, thread_id)
     calls = client.get_calls(
         filter=CallsFilter(trace_ids=trace_ids),
-        expand_columns=["inputs", "output"],
     )
 
     realtime_calls_without_thread_id = [c for c in calls if c.thread_id is None]
