@@ -8,6 +8,7 @@ import json
 import os
 import queue
 import threading
+import time
 import pyaudio
 from dotenv import load_dotenv
 from logger import Logger
@@ -44,6 +45,7 @@ from config import (
     TOOL_MAP,
     WEAVE_PROJECT
 )
+from idle_handler import clear_idle_timer, reset_idle_timer
 from logger import Logger
 
 weave.init(WEAVE_PROJECT)
@@ -62,7 +64,7 @@ async def send_text_client_event(client: RTLowLevelClient):
 async def send_message(client: RTLowLevelClient, data: dict):
     await client.send(json.dumps(data))
 
-async def receive_messages(client: RTLowLevelClient):
+async def receive_messages(client: RTLowLevelClient, thread_id: str | None = None):
     while True:
         message = await client.recv()
         if message is None:
@@ -80,12 +82,13 @@ async def receive_messages(client: RTLowLevelClient):
                 pass
             case "input_audio_buffer.speech_started":
                 await logger.info(f"Server | input_audio_buffer.speech_started | item_id: {message.item_id}, audio_start_ms: {message.audio_start_ms}")
+                await clear_idle_timer(logger)
                 while not audio_output_queue.empty():
                     audio_output_queue.get()
                 await asyncio.sleep(0)
             case "input_audio_buffer.speech_stopped":
                 await logger.info(f"Server | input_audio_buffer.speech_stopped | item_id: {message.item_id}, audio_end_ms: {message.audio_end_ms}")
-                pass
+                await reset_idle_timer(logger, thread_id)
             case "conversation.item.created":
                 await logger.info(f"Server | conversation.item.created | item_id: {message.item.id}, previous_item_id: {message.previous_item_id}")
             case "conversation.item.truncated":
@@ -100,9 +103,10 @@ async def receive_messages(client: RTLowLevelClient):
                 await logger.info(f"Server | conversation.item.input_audio_transcription.delta | item_id: {message.item_id}, delta: {message.delta}")
             case "response.created":
                 await logger.info(f"Server | response.created | response_id: {message.response.id}")
+                await clear_idle_timer(logger)
             case "response.done":
                 await logger.info(f"Server | response.done | response_id: {message.response.id}")
-                pass
+                await reset_idle_timer(logger, thread_id)
             case "response.output_item.added":
                 await logger.info(f"Server | response.output_item.added | response_id: {message.response_id}, item_id: {message.item.id}")
             case "response.output_item.done":
@@ -129,6 +133,7 @@ async def receive_messages(client: RTLowLevelClient):
                 await asyncio.sleep(0)
             case "response.audio.done":
                 await logger.info(f"Server | response.audio.done | response_id: {message.response_id}, item_id: {message.item_id}")
+                await reset_idle_timer(logger, thread_id)
             case "response.function_call_arguments.delta":
                 await logger.info(f"Server | response.function_call_arguments.delta | response_id: {message.response_id}, item_id: {message.item_id}, arguments: {message.delta}")
             case "response.function_call_arguments.done":
@@ -178,12 +183,24 @@ async def send_audio(client: RTLowLevelClient):
         await client.send(InputAudioBufferAppendMessage(audio=base64_audio))
         await asyncio.sleep(0)
 
-def play_audio(output_stream: pyaudio.Stream):
+def play_audio(
+    output_stream: pyaudio.Stream,
+    main_event_loop: asyncio.AbstractEventLoop,
+    thread_id: str | None = None,
+):
+    IDLE_RESET_THROTTLE_SECONDS = 1.0
+    last_idle_reset_at = 0.0
     while True:
         audio_data = audio_output_queue.get()
         output_stream.write(audio_data)
+        now = time.monotonic()
+        if now - last_idle_reset_at >= IDLE_RESET_THROTTLE_SECONDS:
+            main_event_loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(reset_idle_timer(logger, thread_id))
+            )
+            last_idle_reset_at = now
 
-async def with_openai():
+async def with_openai(thread_id: str | None = None):
     key = os.environ.get("OPENAI_API_KEY") or ""
     model = os.environ.get("OPENAI_MODEL") or "gpt-realtime"
 
@@ -251,17 +268,23 @@ async def with_openai():
             )
         )
 
+        main_event_loop = asyncio.get_running_loop()
         threading.Thread(target=listen_audio, args=(input_stream,), daemon=True).start()
-        threading.Thread(target=play_audio, args=(output_stream,), daemon=True).start()
+        threading.Thread(
+            target=play_audio,
+            args=(output_stream, main_event_loop, thread_id),
+            daemon=True,
+        ).start()
         send_audio_task = asyncio.create_task(send_audio(client))
-        receive_task = asyncio.create_task(receive_messages(client))
+        receive_task = asyncio.create_task(receive_messages(client, thread_id))
 
         send_text_client_event_task = asyncio.create_task(send_text_client_event(client))
 
         await asyncio.gather(send_audio_task, receive_task, send_text_client_event_task)
 
 async def main():
-    await with_openai()
+    with weave.thread() as thread_ctx:
+        await with_openai(thread_ctx.thread_id)
 
 if __name__ == "__main__":
     asyncio.run(main())
